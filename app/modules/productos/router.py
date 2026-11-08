@@ -1,93 +1,112 @@
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
+from sqlmodel import Session
 
-from app.producto import service as producto_service
-from app.producto.schemas import (
+from app.core.database import get_session
+from app.core.deps import require_role
+from app.modules.productos.schemas import (
     ProductoCreate,
     ProductoRead,
-    ProductoStockResponse,
+    ProductosPaginados,
+    ProductoStockUpdate,
     ProductoUpdate,
 )
+from app.modules.productos.service import ProductoService
+from app.modules.productos.unit_of_work import ProductoUnitOfWork
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
 
-@router.post("/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
-def alta_producto(producto: ProductoCreate):
-    """Registra un nuevo producto básico en la base de datos."""
-    return producto_service.crear(producto)
+def get_producto_service(
+    session: Session = Depends(get_session),  # noqa: B008
+) -> ProductoService: 
+    uow = ProductoUnitOfWork(session)
+    return ProductoService(uow)
 
 
-@router.get("/", response_model=list[ProductoRead], status_code=status.HTTP_200_OK)
+@router.get("/", response_model=ProductosPaginados, status_code=status.HTTP_200_OK)
 def listar_productos(
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, le=100),
-    activo: bool | None = None,
+    limit: int = Query(20, ge=1, le=100),
+    search: str | None = None,
+    categoria_id: int | None = None,
+    disponible: bool | None = None,
+    service: ProductoService = Depends(get_producto_service),  # noqa: B008
 ):
-    """Devuelve una lista paginada de productos con filtro opcional."""
-    return producto_service.obtener_todos(skip, limit, activo)
+    """Lista productos activos de forma paginada, con filtros opcionales de búsqueda, categoría y disponibilidad.
 
-
-@router.get("/relaciones", status_code=status.HTTP_200_OK)
-def obtener_todas_las_relaciones():
-    """Endpoint para listar todas las relaciones de categorías existentes (GET)."""
-    return producto_service.listar_relaciones()
-
-
-@router.get("/relaciones/ingredientes", status_code=status.HTTP_200_OK)
-def obtener_relaciones_ingredientes():
-    """Endpoint para listar todas las relaciones de ingredientes existentes (GET)."""
-    return producto_service.listar_relaciones_ingredientes()
+    Acceso: Público.
+    """
+    return service.listar_productos(
+        skip=skip,
+        limit=limit,
+        search=search,
+        categoria_id=categoria_id,
+        disponible=disponible,
+    )
 
 
 @router.get("/{id}", response_model=ProductoRead, status_code=status.HTTP_200_OK)
-def detalle_producto(id: int):
-    """Obtiene los datos detallados de un producto específico según su ID."""
-    return producto_service.obtener_por_id(id)
+def obtener_producto(
+    id: int,
+    service: ProductoService = Depends(get_producto_service),  # noqa: B008
+):
+    """Obtiene el detalle de un producto activo junto con su categoría.
+
+    Acceso: Público.
+    """
+    return service.obtener_por_id(id)
+
+
+@router.post("/", response_model=ProductoRead, status_code=status.HTTP_201_CREATED)
+def crear_producto(
+    data: ProductoCreate,
+    service: ProductoService = Depends(get_producto_service),  # noqa: B008
+    _=Depends(require_role(["admin"])),  # noqa: B008
+):
+    """Crea un nuevo producto asociado a un categoria_id.
+
+    Acceso: Solo Admin.
+    """
+    return service.crear_producto(data)
 
 
 @router.put("/{id}", response_model=ProductoRead, status_code=status.HTTP_200_OK)
-def actualizar_producto(id: int, producto: ProductoUpdate):
-    """Actualiza los datos de un producto existente."""
-    return producto_service.actualizar_total(id, producto)
+def actualizar_producto(
+    id: int,
+    data: ProductoUpdate,
+    service: ProductoService = Depends(get_producto_service),  # noqa: B008
+    _=Depends(require_role(["admin"])),  # noqa: B008
+):
+    """Actualiza de forma parcial los campos enviados de un producto existente.
+
+    Acceso: Solo Admin.
+    """
+    return service.actualizar_producto(id, data)
 
 
-@router.post("/{producto_id}/categorias/{categoria_id}", status_code=status.HTTP_201_CREATED)
-def asignar_categoria(producto_id: int, categoria_id: int):
-    """Asocia una categoría a un producto mediante la tabla intermedia."""
-    return producto_service.vincular_categoria(producto_id, categoria_id)
+@router.patch("/{id}/stock", response_model=ProductoRead, status_code=status.HTTP_200_OK)
+def actualizar_stock_producto(
+    id: int,
+    data: ProductoStockUpdate,
+    service: ProductoService = Depends(get_producto_service),  # noqa: B008
+    _=Depends(require_role(["admin"])),  # noqa: B008
+):
+    """Actualiza el stock y la disponibilidad de un producto.
+
+    Acceso: Solo Admin.
+    """
+    return service.actualizar_stock(id, data)
 
 
-@router.delete("/{producto_id}/categorias/{categoria_id}", status_code=status.HTTP_200_OK)
-def desvincular_producto_de_categoria(producto_id: int, categoria_id: int):
-    """Endpoint para desvincular un producto de una categoría (DELETE)."""
-    return producto_service.desvincular_categoria(producto_id, categoria_id)
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def baja_logica_producto(
+    id: int,
+    service: ProductoService = Depends(get_producto_service),  # noqa: B008
+    _=Depends(require_role(["admin"])),  # noqa: B008
+):
+    """Realiza la baja lógica de un producto (activo = False). Responde 204 sin
 
-
-@router.post("/{producto_id}/ingredientes/{ingrediente_id}", status_code=status.HTTP_201_CREATED)
-def asignar_ingrediente(producto_id: int, ingrediente_id: int):
-    """Asocia un ingrediente a un producto mediante la tabla intermedia."""
-    return producto_service.vincular_ingrediente(producto_id, ingrediente_id)
-
-
-@router.delete("/{producto_id}/ingredientes/{ingrediente_id}", status_code=status.HTTP_200_OK)
-def desvincular_ingrediente_de_producto(producto_id: int, ingrediente_id: int):
-    """Endpoint para desvincular un ingrediente de un producto (DELETE)."""
-    return producto_service.desvincular_ingrediente(producto_id, ingrediente_id)
-
-
-@router.put("/{id}/desactivar", response_model=ProductoRead, status_code=status.HTTP_200_OK)
-def borrado_logico_put(id: int):
-    """Realiza una baja lógica del producto cambiando su estado 'activo' a False (PUT)."""
-    return producto_service.desactivar(id)
-
-
-@router.delete("/{id}", response_model=ProductoRead, status_code=status.HTTP_200_OK)
-def eliminar_producto(id: int):
-    """Realiza una baja lógica del producto mediante el verbo DELETE."""
-    return producto_service.desactivar(id)
-
-
-@router.get("/{id}/stock", response_model=ProductoStockResponse, status_code=status.HTTP_200_OK)
-def consultar_stock(id: int):
-    """Consulta el estado actual del inventario de un producto."""
-    return producto_service.obtener_estado_stock(id)
+    cuerpo. Acceso: Solo Admin.
+    """
+    service.baja_logica(id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
