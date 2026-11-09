@@ -1,14 +1,15 @@
 
 from contextlib import asynccontextmanager
 
-# Importación de todos los routers de la aplicación
-from app.modules.categoria.router import router as categoria_router
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.database import create_db_and_tables
+
+# Importación de todos los routers de la aplicación
+from app.modules.categorias.router import router as categoria_router
 from app.modules.pedidos.router import router as pedido_router
 from app.modules.productos.router import router as producto_router
 from app.modules.usuarios.router import router as usuario_router

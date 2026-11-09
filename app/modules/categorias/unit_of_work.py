@@ -1,11 +1,11 @@
 from typing import Self
 
-from app.categoria.repository import CategoriaRepository
-from app.producto.repository import ProductoRepository
 from sqlmodel import Session
 
 from app.core.database import engine
 from app.core.unit_of_work import UnitOfWork as BaseUnitOfWork
+from app.modules.categorias.repository import CategoriaRepository
+from app.modules.productos.repository import ProductoRepository
 
 
 class CategoriaUnitOfWork(BaseUnitOfWork):
