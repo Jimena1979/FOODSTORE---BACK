@@ -1,15 +1,11 @@
-
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from passlib.context import CryptContext
 
 from app.core.config import settings
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.modules.usuarios.models import Usuario
 from app.modules.usuarios.schemas import Token, UserCreate, UserPublic
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class UsuarioService:
@@ -31,13 +27,11 @@ class UsuarioService:
                 detail="El correo electrónico ya está registrado",
             )
 
-        hashed_password = pwd_context.hash(user_in.password)
-
         nuevo_usuario = Usuario(
             username=username_limpio,
             full_name=user_in.full_name.strip(),
             email=email_normalizado,
-            hashed_password=hashed_password,
+            hashed_password=hash_password(user_in.password),
             role="user",
             disabled=False,
             created_at=datetime.now(UTC),
@@ -47,8 +41,10 @@ class UsuarioService:
         return UserPublic.model_validate(nuevo_usuario)
 
     def authenticate(self, username_or_email: str, password: str) -> Token:
-        # Busca por username o por email normalizado
-        user = self.uow.usuarios.get_by_username(username_or_email) or self.uow.usuarios.get_by_email(username_or_email.lower().strip())
+        identificador = username_or_email.strip()
+        user = self.uow.usuarios.get_by_username(identificador) or self.uow.usuarios.get_by_email(
+            identificador.lower()
+        )
 
         if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(
@@ -80,10 +76,7 @@ class UsuarioService:
                 detail="Usuario no encontrado",
             )
         usuario.disabled = False
-        
-        self.uow._session.add(usuario)
-        self.uow._session.flush()
-        self.uow._session.refresh(usuario)
+        self.uow.usuarios.add(usuario)
         return UserPublic.model_validate(usuario)
 
     def desactivar_usuario(self, usuario_id: int, admin_id_actual: int) -> UserPublic:
@@ -99,7 +92,5 @@ class UsuarioService:
                 detail="Usuario no encontrado",
             )
         usuario.disabled = True
-        self.uow._session.add(usuario)
-        self.uow._session.flush()
-        self.uow._session.refresh(usuario)
+        self.uow.usuarios.add(usuario)
         return UserPublic.model_validate(usuario)

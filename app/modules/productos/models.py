@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -23,8 +21,8 @@ class Producto(ProductoBase, table=True):
     __tablename__ = "productos"
 
     id: int | None = Field(default=None, primary_key=True)
-    categoria_id: int = Field(foreign_key="categorias.id", nullable=False)
+    categoria_id: int = Field(foreign_key="categoria.id", nullable=False)
 
     # Relaciones exactas del UML (1:N con Categoria y 1:N con DetallePedido)
-    categoria: Categoria | None = Relationship(back_populates="productos")
-    detalles: list[DetallePedido] = Relationship(back_populates="producto")
+    categoria: "Categoria" = Relationship(back_populates="productos")
+    detalles: list["DetallePedido"] = Relationship(back_populates="producto")

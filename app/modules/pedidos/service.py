@@ -1,174 +1,217 @@
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, status
-
 from app.modules.pedidos.models import DetallePedido, Pedido
-from app.modules.pedidos.repository import PedidoRepository
-from app.modules.pedidos.schemas import CambioEstado, PedidoCreate
-from app.modules.productos.repository import ProductoRepository
+from app.modules.pedidos.schemas import (
+    CambioEstado,
+    PedidoCreate,
+    PedidoRead,
+    PedidosPaginados,
+    ResumenPedidos,
+)
+from app.modules.pedidos.unit_of_work import PedidoUnitOfWork
+
+
+class PedidoNoEncontrado(Exception):
+    pass
+
+
+class ProductoNoEncontrado(Exception):
+    pass
+
+
+class ProductoNoDisponible(Exception):
+    pass
+
+
+class StockInsuficiente(Exception):
+    pass
+
+
+class ProductoRepetido(Exception):
+    pass
+
+
+class PedidoAjeno(Exception):
+    pass
+
+
+class TransicionInvalida(Exception):
+    pass
+
+
+TRANSICIONES_VALIDAS: dict[str, set[str]] = {
+    "PENDIENTE": {"EN_PREPARACION", "CANCELADO"},
+    "EN_PREPARACION": {"ENTREGADO", "CANCELADO"},
+    "ENTREGADO": set(),
+    "CANCELADO": set(),
+}
 
 
 class PedidoService:
-    def __init__(self, session):
-        self.session = session
-        self.pedido_repo = PedidoRepository(session)
-        self.producto_repo = ProductoRepository(session)
+    def __init__(self, uow: PedidoUnitOfWork | None = None) -> None:
+        self.uow = uow or PedidoUnitOfWork()
 
-    def crear_pedido(self, usuario_id: int, data: PedidoCreate) -> Pedido:
-        detalles_pedido: list[DetallePedido] = []
-        total_pedido = 0.0
+    def crear_pedido(self, usuario_id: int, data: PedidoCreate) -> PedidoRead:
+        with self.uow as uow:
+            productos_vistos: set[int] = set()
+            for item_data in data.items:
+                if item_data.producto_id in productos_vistos:
+                    raise ProductoRepetido(
+                        f"El producto con id {item_data.producto_id} está repetido en el pedido."
+                    )
+                productos_vistos.add(item_data.producto_id)
 
-        # 1. Validar y procesar cada ítem del pedido (RN-01, RN-05)
-        for item_data in data.items:
-            producto = self.producto_repo.get_by_id(item_data.producto_id)
-            if not producto:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Producto con id {item_data.producto_id} no encontrado."
-                )
-
-            # Validar reglas de venta del producto (RN-01)
-            if not producto.activo or not producto.disponible:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El producto '{producto.nombre}' no se encuentra activo o disponible."
-                )
-
-            if producto.stock < item_data.cantidad:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Stock insuficiente para el producto '{producto.nombre}'. Stock actual: {producto.stock}"
-                )
-
-            # Descontar stock (RN-01)
-            producto.stock -= item_data.cantidad
-            self.session.add(producto)
-
-            # Copia inmutable de datos (Snapshot - RN-05)
-            subtotal = producto.precio_base * item_data.cantidad
-            total_pedido += subtotal
-
-            detalle = DetallePedido(
-                producto_id=producto.id,
-                cantidad=item_data.cantidad,
-                nombre_producto=producto.nombre,
-                precio_unitario=producto.precio_base,
-                subtotal=subtotal
+            nuevo_pedido = Pedido(
+                usuario_id=usuario_id,
+                estado="PENDIENTE",
+                forma_pago=data.forma_pago,
+                direccion_entrega=data.direccion_entrega,
+                notas=data.notas,
+                total=0.0,
             )
-            detalles_pedido.append(detalle)
+            uow.pedidos.create(nuevo_pedido)
 
-        # 2. Crear la entidad Pedido
-        nuevo_pedido = Pedido(
-            usuario_id=usuario_id,
-            estado="PENDIENTE",
-            forma_pago=data.forma_pago,
-            direccion_entrega=data.direccion_entrega,
-            notas=data.notas,
-            total=total_pedido,
-            items=detalles_pedido
-        )
+            total_pedido = 0.0
 
-        # 3. Persistir usando el repositorio (el commit lo maneja el Unit of Work)
-        return self.pedido_repo.create(nuevo_pedido)
+            for item_data in data.items:
+                producto = uow.productos.get_by_id(item_data.producto_id)
+                if not producto or not producto.activo:
+                    raise ProductoNoEncontrado(
+                        f"Producto con id {item_data.producto_id} no encontrado o inactivo."
+                    )
 
-    def obtener_pedido_por_id(self, pedido_id: int, usuario_id: int | None = None, es_admin: bool = False) -> Pedido:
-        pedido = self.pedido_repo.get_by_id(pedido_id)
-        if not pedido:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pedido no encontrado."
-            )
+                if not producto.disponible:
+                    raise ProductoNoDisponible(
+                        f"El producto '{producto.nombre}' no se encuentra disponible."
+                    )
 
-        # Si no es admin, verificar que el pedido pertenezca al usuario autenticado
-        if not es_admin and pedido.usuario_id != usuario_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para ver este pedido."
-            )
+                if producto.stock < item_data.cantidad:
+                    raise StockInsuficiente(
+                        f"Stock insuficiente para '{producto.nombre}'. Stock actual: {producto.stock}"
+                    )
 
-        return pedido
+                producto.stock -= item_data.cantidad
+                uow.productos.add(producto)
 
-    def listar_pedidos(self, skip: int, limit: int, usuario_id: int | None = None) -> tuple[list[Pedido], int]:
-        return self.pedido_repo.get_all_paginated(skip=skip, limit=limit, usuario_id=usuario_id)
+                subtotal = float(producto.precio_base) * item_data.cantidad
+                total_pedido += subtotal
 
-    def cambiar_estado(self, pedido_id: int, estado_in: CambioEstado, usuario_id: int, es_admin: bool) -> Pedido:
-        pedido = self.pedido_repo.get_by_id(pedido_id)
-        if not pedido:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pedido no encontrado."
-            )
-
-        nuevo_estado = estado_in.estado
-
-        # Control de permisos y reglas de transición (RN-02, RN-03, RN-04)
-        if not es_admin:
-            # El cliente solo puede cancelar y únicamente si está PENDIENTE (RN-04)
-            if pedido.usuario_id != usuario_id:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado.")
-            if nuevo_estado != "CANCELADO" or pedido.estado != "PENDIENTE":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Los clientes solo pueden cancelar pedidos que se encuentren en estado PENDIENTE."
+                detalle = DetallePedido(
+                    pedido_id=nuevo_pedido.id,
+                    producto_id=producto.id,
+                    cantidad=item_data.cantidad,
+                    nombre_producto=producto.nombre,
+                    precio_unitario=float(producto.precio_base),
+                    subtotal=subtotal,
                 )
-        else:
-            # Validaciones de transiciones permitidas para admin (RN-02)
-            if pedido.estado in ["ENTREGADO", "CANCELADO"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"El pedido ya se encuentra en un estado terminal ({pedido.estado}) y no puede modificarse."
-                )
-            
-            if pedido.estado == "PENDIENTE" and nuevo_estado not in ["EN_PREPARACION", "CANCELADO"]:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transición de estado no permitida.")
-            
-            if pedido.estado == "EN_PREPARACION" and nuevo_estado not in ["ENTREGADO", "CANCELADO"]:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Transición de estado no permitida.")
+                uow._session.add(detalle)
 
-        # Si pasa a CANCELADO, restituir el stock de los productos (RN-03)
-        if nuevo_estado == "CANCELADO" and pedido.estado != "CANCELADO":
+            nuevo_pedido.total = total_pedido
+            uow.pedidos.update(nuevo_pedido)
+
+            pedido_completo = uow.pedidos.get_by_id_con_items(nuevo_pedido.id)
+            return PedidoRead.model_validate(pedido_completo)
+
+    def obtener_pedido_por_id(
+        self, pedido_id: int, usuario_id: int, es_admin: bool
+    ) -> PedidoRead:
+        with self.uow as uow:
+            pedido = uow.pedidos.get_by_id_con_items(pedido_id)
+            if not pedido:
+                raise PedidoNoEncontrado("Pedido no encontrado.")
+
+            if not es_admin and pedido.usuario_id != usuario_id:
+                raise PedidoAjeno("No tienes permisos para ver este pedido.")
+
+            return PedidoRead.model_validate(pedido)
+
+    def listar_pedidos(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+        usuario_id: int | None = None,
+        estado: str | None = None,
+    ) -> PedidosPaginados:
+        with self.uow as uow:
+            pedidos, total = uow.pedidos.get_all_paginated(
+                skip=skip,
+                limit=limit,
+                usuario_id=usuario_id,
+                estado=estado,
+            )
+            return PedidosPaginados(
+                total=total,
+                items=[PedidoRead.model_validate(p) for p in pedidos],
+            )
+
+    def cambiar_estado(
+        self, pedido_id: int, estado_in: CambioEstado, usuario_id: int, es_admin: bool
+    ) -> PedidoRead:
+        with self.uow as uow:
+            pedido = uow.pedidos.get_by_id_con_items(pedido_id)
+            if not pedido:
+                raise PedidoNoEncontrado("Pedido no encontrado.")
+
+            nuevo_estado = estado_in.estado
+
+            if not es_admin:
+                if pedido.usuario_id != usuario_id:
+                    raise PedidoAjeno("No autorizado.")
+                if nuevo_estado != "CANCELADO" or pedido.estado != "PENDIENTE":
+                    raise TransicionInvalida(
+                        "Los clientes solo pueden cancelar pedidos que se encuentren en estado PENDIENTE."
+                    )
+            else:
+                permitidos = TRANSICIONES_VALIDAS.get(pedido.estado, set())
+                if nuevo_estado not in permitidos:
+                    raise TransicionInvalida(
+                        f"Transición de '{pedido.estado}' a '{nuevo_estado}' no permitida."
+                    )
+
+            if nuevo_estado == "CANCELADO" and pedido.estado != "CANCELADO":
+                for detalle in pedido.items:
+                    producto = uow.productos.get_by_id(detalle.producto_id)
+                    if producto:
+                        producto.stock += detalle.cantidad
+                        uow.productos.add(producto)
+
+            pedido.estado = nuevo_estado
+            pedido.updated_at = datetime.now(UTC)
+            uow.pedidos.update(pedido)
+
+            pedido_actualizado = uow.pedidos.get_by_id_con_items(pedido.id)
+            return PedidoRead.model_validate(pedido_actualizado)
+
+    def obtener_resumen(self) -> ResumenPedidos:
+        with self.uow as uow:
+            resumen = uow.pedidos.get_resumen_estadisticas()
+            return ResumenPedidos.model_validate(resumen)
+
+    def cancelar_pedido(
+        self, pedido_id: int, usuario_id: int, es_admin: bool
+    ) -> PedidoRead:
+        with self.uow as uow:
+            pedido = uow.pedidos.get_by_id_con_items(pedido_id)
+            if not pedido:
+                raise PedidoNoEncontrado("Pedido no encontrado.")
+
+            if not es_admin and pedido.usuario_id != usuario_id:
+                raise PedidoAjeno("No tienes permisos para cancelar un pedido ajeno.")
+
+            if pedido.estado != "PENDIENTE":
+                raise TransicionInvalida(
+                    "Solo se pueden cancelar pedidos que se encuentren en estado PENDIENTE."
+                )
+
             for detalle in pedido.items:
-                producto = self.producto_repo.get_by_id(detalle.producto_id)
+                producto = uow.productos.get_by_id(detalle.producto_id)
                 if producto:
                     producto.stock += detalle.cantidad
-                    self.session.add(producto)
+                    uow.productos.add(producto)
 
-        pedido.estado = nuevo_estado
-        pedido.updated_at = datetime.now(UTC)
-        return self.pedido_repo.update(pedido)
+            pedido.estado = "CANCELADO"
+            pedido.updated_at = datetime.now(UTC)
+            uow.pedidos.update(pedido)
 
-    def obtener_resumen(self) -> dict:
-        return self.pedido_repo.get_resumen_estadisticas()
-
-    def cancelar_pedido(self, pedido_id: int, usuario_id: int, es_admin: bool) -> Pedido:
-        pedido = self.pedido_repo.get_by_id(pedido_id)
-        if not pedido:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pedido no encontrado."
-            )
-
-        # Validar propiedad (si no es admin, debe ser su propio pedido) (RN-04)
-        if not es_admin and pedido.usuario_id != usuario_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permisos para cancelar un pedido ajeno."
-            )
-
-        # Validar que el pedido esté en estado PENDIENTE
-        if pedido.estado != "PENDIENTE":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Solo se pueden cancelar pedidos que se encuentren en estado PENDIENTE."
-            )
-
-        # Restituir el stock de los productos (RN-03)
-        for detalle in pedido.items:
-            producto = self.producto_repo.get_by_id(detalle.producto_id)
-            if producto:
-                producto.stock += detalle.cantidad
-                self.session.add(producto)
-
-        pedido.estado = "CANCELADO"
-        pedido.updated_at = datetime.now(UTC)
-        return self.pedido_repo.update(pedido)
+            pedido_cancelado = uow.pedidos.get_by_id_con_items(pedido.id)
+            return PedidoRead.model_validate(pedido_cancelado)

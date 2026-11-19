@@ -1,18 +1,3 @@
-# app/modules/usuarios/router.py
-"""
-Router de autenticación y gestión de usuarios.
-
-HTTP puro: parsear request, validar schema Pydantic, delegar al Service,
-serializar response con response_model. No contiene lógica de negocio.
-
-Capa: Router
-Conoce a: Service (vía UoW)
-NO conoce a: Repository, Model (solo esquemas Pydantic para response_model)
-
-Regla de imports:
-    Router → Service → UoW → Repository → Model
-"""
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
@@ -27,7 +12,6 @@ from app.modules.usuarios.service import UsuarioService
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-# Registro
 @router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 def register(
     user_in: UserCreate,
@@ -38,7 +22,6 @@ def register(
         return service.register(user_in)
 
 
-# Login (OAuth2 Password Flow) 
 @router.post("/token", response_model=Token)
 def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -48,8 +31,7 @@ def login(
     with uow:
         service = UsuarioService(uow)
         token = service.authenticate(form_data.username, form_data.password)
-        
-        # Se entrega el token en una cookie HttpOnly (segura frente a XSS)
+
         response.set_cookie(
             key="access_token",
             value=token.access_token,
@@ -73,7 +55,6 @@ def logout(response: Response):
     return {"mensaje": "Sesión cerrada exitosamente"}
 
 
-# Rutas protegidas 
 @router.get("/me", response_model=UserPublic)
 def read_me(
     current_user: Annotated[UserPublic, Depends(get_current_active_user)],
@@ -81,7 +62,6 @@ def read_me(
     return current_user
 
 
-# Rutas de administración (RBAC)
 @router.get("/admin/usuarios", response_model=list[UserPublic])
 def list_users(
     _admin: Annotated[UserPublic, Depends(require_role(["admin"]))],

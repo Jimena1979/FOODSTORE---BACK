@@ -1,76 +1,83 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.unit_of_work import UnitOfWork, get_uow
+from app.core.deps import require_role
 from app.modules.categorias.schemas import (
     CategoriaCreate,
     CategoriaRead,
     CategoriaUpdate,
 )
-from app.modules.categorias.service import CategoriaService
+from app.modules.categorias.service import (
+    CategoriaNoEncontrada,
+    CategoriaService,
+    NombreDuplicado,
+)
+from app.modules.usuarios.schemas import UserPublic
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
 
 
-@router.get("/", response_model=list[CategoriaRead], status_code=status.HTTP_200_OK)
+def get_categoria_service() -> CategoriaService:
+    return CategoriaService()
+
+
+@router.get("", response_model=list[CategoriaRead], status_code=status.HTTP_200_OK)
+@router.get("/", response_model=list[CategoriaRead], status_code=status.HTTP_200_OK, include_in_schema=False)
 def listar_categorias(
+    service: Annotated[CategoriaService, Depends(get_categoria_service)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    uow: Annotated[UnitOfWork, Depends(get_uow)] = None,
 ) -> list[CategoriaRead]:
-    """Lista las categorías activas de forma paginada."""
-    with uow:
-        service = CategoriaService(uow)
-        return service.listar_activas(skip=skip, limit=limit)
+    return service.listar_activas(skip=skip, limit=limit)
 
 
 @router.get("/{categoria_id}", response_model=CategoriaRead, status_code=status.HTTP_200_OK)
 def obtener_categoria(
     categoria_id: int,
-    uow: Annotated[UnitOfWork, Depends(get_uow)] = None,
+    service: Annotated[CategoriaService, Depends(get_categoria_service)],
 ) -> CategoriaRead:
-    """Obtiene una categoría activa por su ID (devuelve 404 si no existe o está inactiva)."""
-    with uow:
-        service = CategoriaService(uow)
+    try:
         return service.obtener_por_id(categoria_id)
+    except CategoriaNoEncontrada as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@router.post("/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def crear_categoria(
     data: CategoriaCreate,
-    uow: Annotated[UnitOfWork, Depends(get_uow)] = None,
-    # _admin: Annotated[Any, Depends(require_role(["admin"]))] = None, # Descomentar si solo los admin pueden crear
+    _admin: Annotated[UserPublic, Depends(require_role(["admin"]))],
+    service: Annotated[CategoriaService, Depends(get_categoria_service)],
 ) -> CategoriaRead:
-    """Crea una nueva categoría (devuelve 409 si el nombre ya existe)."""
-    with uow:
-        service = CategoriaService(uow)
-        categoria = service.crear(data)
-        uow.commit()
-        return categoria
+    try:
+        return service.crear(data)
+    except NombreDuplicado as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.put("/{categoria_id}", response_model=CategoriaRead, status_code=status.HTTP_200_OK)
 def actualizar_categoria(
     categoria_id: int,
     data: CategoriaUpdate,
-    uow: Annotated[UnitOfWork, Depends(get_uow)] = None,
+    _admin: Annotated[UserPublic, Depends(require_role(["admin"]))],
+    service: Annotated[CategoriaService, Depends(get_categoria_service)],
 ) -> CategoriaRead:
-    """Actualiza parcialmente una categoría existente (excluyendo el campo activo)."""
-    with uow:
-        service = CategoriaService(uow)
-        categoria = service.actualizar(categoria_id, data)
-        uow.commit()
-        return categoria
+    try:
+        return service.actualizar(categoria_id, data)
+    except CategoriaNoEncontrada as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except NombreDuplicado as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.delete("/{categoria_id}", status_code=status.HTTP_204_NO_CONTENT)
 def baja_logica_categoria(
     categoria_id: int,
-    uow: Annotated[UnitOfWork, Depends(get_uow)] = None,
+    _admin: Annotated[UserPublic, Depends(require_role(["admin"]))],
+    service: Annotated[CategoriaService, Depends(get_categoria_service)],
 ) -> None:
-    """Realiza la baja lógica de una categoría cambiando su estado activo a false."""
-    with uow:
-        service = CategoriaService(uow)
+    try:
         service.baja_logica(categoria_id)
-        uow.commit()
+    except CategoriaNoEncontrada as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
