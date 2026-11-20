@@ -30,7 +30,6 @@ def get_pedido_service() -> PedidoService:
 
 
 @router.post("", response_model=PedidoRead, status_code=status.HTTP_201_CREATED)
-@router.post("/", response_model=PedidoRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def crear_pedido(
     data: PedidoCreate,
     current_user: Annotated[UserPublic, Depends(get_current_active_user)],
@@ -45,7 +44,6 @@ def crear_pedido(
 
 
 @router.get("", response_model=PedidosPaginados)
-@router.get("/", response_model=PedidosPaginados, include_in_schema=False)
 def listar_pedidos(
     current_user: Annotated[UserPublic, Depends(get_current_active_user)],
     service: Annotated[PedidoService, Depends(get_pedido_service)],

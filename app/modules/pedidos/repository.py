@@ -25,23 +25,24 @@ class PedidoRepository(BaseRepository[Pedido]):
         usuario_id: int | None = None,
         estado: str | None = None,
     ) -> tuple[list[Pedido], int]:
+        estado_normalizado = estado.strip().upper() if estado and estado.strip() else None
+
         query = select(Pedido).options(selectinload(Pedido.items))
 
         if usuario_id is not None:
             query = query.where(Pedido.usuario_id == usuario_id)
 
-        if estado:
-            query = query.where(Pedido.estado == estado)
+        if estado_normalizado:
+            query = query.where(Pedido.estado == estado_normalizado)
+
+        condiciones = []
+        if usuario_id is not None:
+            condiciones.append(Pedido.usuario_id == usuario_id)
+        if estado_normalizado:
+            condiciones.append(Pedido.estado == estado_normalizado)
 
         count_query = select(func.count()).select_from(
-            select(Pedido.id)
-            .where(
-                *(
-                    ([Pedido.usuario_id == usuario_id] if usuario_id is not None else [])
-                    + ([Pedido.estado == estado] if estado else [])
-                )
-            )
-            .subquery()
+            select(Pedido.id).where(*condiciones).subquery()
         )
         total = self.session.exec(count_query).one()
 

@@ -35,11 +35,17 @@ class CategoriaService:
 
     def crear(self, data: CategoriaCreate) -> CategoriaRead:
         with self.uow as uow:
-            existente = uow.categorias.get_by_nombre(data.nombre)
+            nombre_limpio = data.nombre.strip()
+            existente = uow.categorias.get_by_nombre(nombre_limpio)
             if existente:
                 raise NombreDuplicado("El nombre de la categoría ya existe")
 
-            nueva = Categoria(**data.model_dump())
+            payload = data.model_dump()
+            payload["nombre"] = nombre_limpio
+            if isinstance(payload.get("descripcion"), str):
+                payload["descripcion"] = payload["descripcion"].strip()
+
+            nueva = Categoria(**payload)
             uow.categorias.add(nueva)
             return CategoriaRead.model_validate(nueva)
 
@@ -51,11 +57,15 @@ class CategoriaService:
 
             datos_update = data.model_dump(exclude_unset=True)
             if "nombre" in datos_update and datos_update["nombre"] is not None:
-                nuevo_nombre = datos_update["nombre"]
-                if nuevo_nombre.lower() != categoria.nombre.lower():
+                nuevo_nombre = datos_update["nombre"].strip()
+                datos_update["nombre"] = nuevo_nombre
+                if nuevo_nombre.lower() != categoria.nombre.strip().lower():
                     duplicada = uow.categorias.get_by_nombre(nuevo_nombre)
                     if duplicada:
                         raise NombreDuplicado("El nombre de la categoría ya existe")
+
+            if isinstance(datos_update.get("descripcion"), str):
+                datos_update["descripcion"] = datos_update["descripcion"].strip()
 
             for key, value in datos_update.items():
                 setattr(categoria, key, value)

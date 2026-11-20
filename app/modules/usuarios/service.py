@@ -14,9 +14,9 @@ class UsuarioService:
 
     def register(self, user_in: UserCreate) -> UserPublic:
         email_normalizado = user_in.email.strip().lower()
-        username_limpio = user_in.username.strip()
+        username_normalizado = user_in.username.strip().lower()
 
-        if self.uow.usuarios.get_by_username(username_limpio):
+        if self.uow.usuarios.get_by_username(username_normalizado):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="El nombre de usuario ya está registrado",
@@ -28,7 +28,7 @@ class UsuarioService:
             )
 
         nuevo_usuario = Usuario(
-            username=username_limpio,
+            username=username_normalizado,
             full_name=user_in.full_name.strip(),
             email=email_normalizado,
             hashed_password=hash_password(user_in.password),
@@ -41,9 +41,9 @@ class UsuarioService:
         return UserPublic.model_validate(nuevo_usuario)
 
     def authenticate(self, username_or_email: str, password: str) -> Token:
-        identificador = username_or_email.strip()
+        identificador = username_or_email.strip().lower()
         user = self.uow.usuarios.get_by_username(identificador) or self.uow.usuarios.get_by_email(
-            identificador.lower()
+            identificador
         )
 
         if not user or not verify_password(password, user.hashed_password):

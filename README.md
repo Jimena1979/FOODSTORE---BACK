@@ -1,36 +1,42 @@
 # Food Store — Sistema de Pedidos de Comida
 
 Trabajo Práctico Integrador — **Programación 4**
+
 **Tecnicatura Universitaria en Programación a Distancia — UTN**
 
 ## Repositorio y Entrega
 
-- **URL del repositorio público:** `https://github.com/TU_USUARIO/TU_REPOSITORIO`
-- **Video de demostración (10 a 15 minutos):** `https://TU_ENLACE_DE_VIDEO_PUBLICO`
+* **URL del repositorio BACK público:** `https://github.com/Jimena1979/FOODSTORE---BACK`
 
+* **URL del repositorio FRONT público:** `https://github.com/Jimena1979/FOODSTORE---FRONT`
+
+* **Video de demostración (10 a 15 minutos):** `https://TU_ENLACE_DE_VIDEO_PUBLICO` 
 
 ## 1. Descripción General del Sistema
 
 **Food Store** es una aplicación web full stack para gestionar un negocio de comidas con dos roles diferenciados (**`user`** y **`admin`**) y separación completa entre backend y frontend:
 
-- **¿Qué hace el backend (`FOODSTORE - BACK`)?**
+* **¿Qué hace el backend (`FOODSTORE - BACK`)?**
   Está construido con **FastAPI** y **SQLModel** bajo el prefijo `/api/v1` (con documentación interactiva en `/docs` y `/redoc`), persistiendo en **PostgreSQL** (o **SQLite** en desarrollo local). Organiza los dominios en módulos con arquitectura en capas (**Router**, **Service**, **Unit of Work**, **Repository**, **Models** y **Schemas**), aplica autenticación con **JWT en cookie `HttpOnly`**, protege rutas por sesión y rol, administra bajas lógicas y ejecuta reglas transaccionales en pedidos (descuento y restitución de stock, copia inmutable de nombre/precio/subtotal y máquina de estados).
 
-- **¿Qué hace el frontend (`FOODSTORE - FRONT`)?**
+* **¿Qué hace el frontend (`FOODSTORE - FRONT`)?**
   Está construido con **React + TypeScript + Vite + Tailwind CSS v4**, consumiendo la API con **Axios** (`withCredentials: true`), gestionando el estado del servidor con **TanStack Query** (consultas, mutaciones e invalidación) y el estado del cliente con **Zustand + persist** (`authStore` y `cartStore`). Incluye **TanStack Form** para formularios y **TanStack Table** para los paneles de administración, con rutas protegidas mediante `ProtectedRoute`. En `vite.config.ts` se utiliza `import.meta.dirname` en lugar de `__dirname` para evitar avisos de Vite en ESM.
 
 ## 2. Requisitos
 
 ### Backend (`FOODSTORE - BACK`)
 
-- **Python:** 3.11 a 3.13
-- **Base de datos:** PostgreSQL 15+ (para desarrollo local se admite SQLite cambiando `DATABASE_URL`)
-- **Dependencias:** fijadas en `requirements.txt` (incluye `passlib[bcrypt]==1.7.4` y `bcrypt==4.0.1`)
+* **Python:** 3.11 a 3.13
+
+* **Base de datos:** PostgreSQL 15+ (para desarrollo local se admite SQLite cambiando `DATABASE_URL`)
+
+* **Dependencias:** fijadas en `requirements.txt` (incluye `passlib[bcrypt]==1.7.4` y `bcrypt==4.0.1`)
 
 ### Frontend (`FOODSTORE - FRONT`)
 
-- **Node.js:** 20.19 o superior
-- **Gestor de paquetes:** `pnpm` 9 o superior
+* **Node.js:** 20.19 o superior
+
+* **Gestor de paquetes:** `pnpm` 9 o superior
 
 ## 3. Variables de Entorno
 
@@ -38,28 +44,31 @@ Trabajo Práctico Integrador — **Programación 4**
 
 Copiá `.env.example` a `.env` dentro de `FOODSTORE - BACK` y completá los valores:
 
-```env
+```
 DATABASE_URL=postgresql://usuario:contraseña@localhost:5432/foodstore_db
 SECRET_KEY=cambiar-esta-clave-de-al-menos-32-caracteres
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 FRONTEND_ORIGIN=http://localhost:5173
+
 ```
 
 > Para pruebas locales rápidas sin servidor PostgreSQL podés usar `DATABASE_URL=sqlite:///./foodstore.db`.
+>
 > Recordá mantener alineados los parámetros de conexión de PostgreSQL (`POSTGRES_DB`, usuario, contraseña y URL de conexión) con la base de datos existente y la configuración en `app/core/config.py`.
 
 ### Frontend (`FOODSTORE - FRONT/.env.example` -> `FOODSTORE - FRONT/.env`)
 
 Copiá `.env.example` a `.env` dentro de `FOODSTORE - FRONT`:
 
-```env
+```
 VITE_API_URL=http://localhost:8000/api/v1
+
 ```
 
 ## 4. Árbol de Carpetas
 
-```text
+```
 FOODSTORE/
 ├── README.md
 ├── FOODSTORE - BACK/
@@ -108,6 +117,7 @@ FOODSTORE/
         └── routes/
             ├── AppRouter.tsx
             └── ProtectedRoute.tsx
+
 ```
 
 ## 5. Instalación y Ejecución
@@ -116,86 +126,94 @@ FOODSTORE/
 
 1. **Entrar a `FOODSTORE - BACK` y crear/activar el entorno virtual**:
 
-   ```bash
+   ```
    cd "FOODSTORE - BACK"
    python -m venv .venv
    # Windows:
    .venv\Scripts\activate
    # Linux / macOS:
    source .venv/bin/activate
+   
    ```
 
 2. **Instalar dependencias**:
 
-   ```bash
+   ```
    pip install -r requirements.txt
+   
    ```
 
 3. **Crear el archivo `.env` y ejecutar el seed**:
 
-   ```bash
+   ```
    cp .env.example .env
    python -m app.db.seed
+   
    ```
 
    El comando `python -m app.db.seed` es idempotente y carga el usuario administrador, categorías y productos iniciales con stock.
 
 4. **Levantar el servidor**:
 
-   ```bash
+   ```
    uvicorn app.main:app --reload
+   
    ```
 
-- API disponible en: `http://localhost:8000/api/v1`
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+* API disponible en: `http://localhost:8000/api/v1`
+
+* Swagger UI: `http://localhost:8000/docs`
+
+* ReDoc: `http://localhost:8000/redoc`
 
 ### B. Frontend (`FOODSTORE - FRONT`)
 
 1. **Entrar a `FOODSTORE - FRONT` e instalar dependencias con `pnpm`**:
 
-   ```bash
+   ```
    cd "FOODSTORE - FRONT"
    pnpm install
+   
    ```
 
 2. **Configurar el archivo `.env`**:
 
-   ```bash
+   ```
    cp .env.example .env
+   
    ```
 
 3. **Verificar compilación de tipos/build y ejecutar en modo desarrollo**:
 
-   ```bash
+   ```
    pnpm build
    pnpm dev
+   
    ```
 
-- Aplicación disponible en: `http://localhost:5173`
+* Aplicación disponible en: `http://localhost:5173`
 
 ## 6. Seed de Base de Datos y Usuario Administrador (`app/db/seed.py`)
 
 Al ejecutar `python -m app.db.seed` de forma idempotente se crean (o verifican sin duplicar) los datos iniciales del sistema:
 
-- **Usuario administrador:**
-  - **Usuario (`username`):** `admin`
-  - **Contraseña (`password`):** `Admin1234!`
-  - **Rol:** `admin`
-- **Categorías iniciales:** `Pizzas`, `Hamburguesas`, `Bebidas`, `Postres`.
-- **Productos iniciales con stock:** `Pizza Muzzarella` (stock: `20`), `Pizza Napolitana` (stock: `15`), `Pizza Fugazzeta` (stock: `12`), `Burger Clásica` (stock: `25`), `Burger Doble Bacon` (stock: `18`), `Gaseosa Cola 1.5L` (stock: `30`), `Agua sin Gas 500ml` (stock: `40`) y `Flan Casero con Dulce` (stock: `14`).
+* **Usuario administrador:**
+
+  * **Usuario (`username`):** `admin`
+
+  * **Contraseña (`password`):** `Admin1234!`
+
+  * **Rol:** `admin`
+
+* **Categorías iniciales:** `Pizzas`, `Hamburguesas`, `Bebidas`, `Postres`.
+
+* **Productos iniciales con stock:** `Pizza Muzzarella` (stock: `20`), `Pizza Napolitana` (stock: `15`), `Pizza Fugazzeta` (stock: `12`), `Burger Clásica` (stock: `25`), `Burger Doble Bacon` (stock: `18`), `Gaseosa Cola 1.5L` (stock: `30`), `Agua sin Gas 500ml` (stock: `40`) y `Flan Casero con Dulce` (stock: `14`).
 
 Los clientes nuevos pueden registrarse desde la pantalla `/register` y se crean automáticamente con rol `user`.
 
-### Ajustes y correcciones aplicadas al Seed y Modelos
-
-- **Registro de modelos en `metadata`:** Todos los modelos (`Usuario`, `Categoria`, `Producto`, `Pedido`, `DetallePedido`) se importan en `create_db_and_tables()` antes de ejecutar `SQLModel.metadata.create_all(engine)`, asegurando que SQLAlchemy registre todas las tablas y relaciones sin fallos al iniciar el seed o la API.
-- **Claves foráneas y nombres de tabla:** Se alinearon las claves foráneas con los nombres de tabla definidos en los modelos (`categoria.id` en `Producto`, `productos.id` en `DetallePedido`, `pedido.id` en `DetallePedido` y `usuario.id` en `Pedido`).
-- **Anotaciones de `Relationship`:** Se evitaron anotaciones diferidas conflictivas con `from __future__ import annotations` en los módulos con relaciones SQLModel/SQLAlchemy, utilizando referencias de cadena limpias (`"Categoria"`, `list["DetallePedido"]`, `"Pedido"`, `"Producto"`, `"Usuario"`).
-
 Salida esperada al ejecutar `python -m app.db.seed`:
 
-```text
+```
 Iniciando seed de Food Store...
 - Admin creado: admin / Admin1234!
 - Categoría creada: Pizzas
@@ -211,27 +229,39 @@ Iniciando seed de Food Store...
 - Producto creado: Agua sin Gas 500ml (stock: 40)
 - Producto creado: Flan Casero con Dulce (stock: 14)
 Seed completado correctamente.
+
 ```
 
 ## 7. Funcionalidades, Rutas y Reglas de Negocio
 
 ### Funcionalidades de Cliente (`user`)
 
-- **Catálogo (`/`)**: listado paginado desde el servidor (`skip` y `limit`), búsqueda por nombre, filtro por categoría, `Skeleton` de carga, estado vacío y botón **Agregar al carrito** (solo para productos activos, disponibles y con stock).
-- **Carrito (`/carrito`)**: gestión de cantidades, subtotales, total y persistencia en el navegador vía `cartStore`.
-- **Checkout (`/checkout`)**: formulario con **TanStack Form** para `direccion_entrega` (5 a 200 caracteres), `forma_pago` (`EFECTIVO` o `TRANSFERENCIA`) y `notas` opcionales; crea el pedido en `PENDIENTE`, limpia el carrito y redirige a `/mis-pedidos`.
-- **Mis pedidos (`/mis-pedidos`)**: consulta de pedidos propios, modal de detalle con líneas inmutables y cancelación permitida únicamente en estado `PENDIENTE`.
+* **Catálogo (`/`)**: listado paginado desde el servidor (`skip` y `limit`), búsqueda por nombre, filtro por categoría, `Skeleton` de carga, estado vacío y botón **Agregar al carrito**. Los productos con `stock = 0` o no disponibles pueden visualizarse en el catálogo activo, pero no se permiten agregar/vender sin stock suficiente y disponibilidad.
+
+* **Carrito (`/carrito`)**: gestión de cantidades, subtotales, total y persistencia en el navegador vía `cartStore` por clave de usuario (`user-<id>`) o invitado (`guest`), con fusión automática del carrito invitado al iniciar sesión o recuperar sesión (`mergeGuestCartToUser`).
+
+* **Checkout (`/checkout`)**: formulario con **TanStack Form** para `direccion_entrega` (5 a 200 caracteres), `forma_pago` (`EFECTIVO` o `TRANSFERENCIA`) y `notas` opcionales; crea el pedido en `PENDIENTE`, limpia el carrito y redirige a `/mis-pedidos`.
+
+* **Mis pedidos (`/mis-pedidos`)**: consulta de pedidos propios, modal de detalle con líneas inmutables y cancelación permitida únicamente en estado `PENDIENTE`.
 
 ### Funcionalidades de Administración (`admin`)
 
-- **Resumen (`/admin/resumen`)**: tarjetas con indicadores (`pendientes`, `en_preparacion`, `entregados`, `cancelados`, `pedidos_hoy` e `ingresos_entregados`).
-- **Categorías (`/admin/categorias`)**: ABM con **TanStack Table** y **TanStack Form**, validación de nombre único (2 a 100 caracteres) y baja lógica (`activo = false`).
-- **Productos (`/admin/productos`)**: ABM con **TanStack Table** y **TanStack Form**, actualización de stock y disponibilidad (`PATCH /productos/{id}/stock`) y baja lógica (`activo = false`).
-- **Pedidos (`/admin/pedidos`)**: listado con filtro por estado y transiciones según la máquina de estados (`PENDIENTE` -> `EN_PREPARACION` o `CANCELADO`; `EN_PREPARACION` -> `ENTREGADO` o `CANCELADO`; `ENTREGADO` y `CANCELADO` son terminales).
-- **Usuarios (`/admin/usuarios`)**: listado con **TanStack Table** y botones **Activar** / **Desactivar** (ocultando **Desactivar** en la fila del usuario de la sesión actual y evitando que un admin se desactive a sí mismo).
+* **Resumen (`/admin/resumen`)**: tarjetas con indicadores (`pendientes`, `en_preparacion`, `entregados`, `cancelados`, `pedidos_hoy` e `ingresos_entregados`).
+
+* **Categorías (`/admin/categorias`)**: ABM con **TanStack Table** y **TanStack Form**, validación de nombre único (2 a 100 caracteres) y baja lógica (`activo = false`). La baja lógica de una categoría no libera su nombre único ni oculta por sí sola sus productos.
+
+* **Productos (`/admin/productos`)**: ABM con **TanStack Table** y **TanStack Form**, validación de categoría existente y activa (`activo = true`), actualización de stock y disponibilidad (`PATCH /productos/{id}/stock`) y baja lógica (`activo = false`).
+
+* **Pedidos (`/admin/pedidos`)**: listado con filtro por estado y transiciones según la máquina de estados (`PENDIENTE` -> `EN_PREPARACION` o `CANCELADO`; `EN_PREPARACION` -> `ENTREGADO` o `CANCELADO`; `ENTREGADO` y `CANCELADO` son terminales).
+
+* **Usuarios (`/admin/usuarios`)**: listado con **TanStack Table** y botones **Activar** / **Desactivar** (`disabled = false` / `disabled = true`), ocultando **Desactivar** en la fila del usuario de la sesión actual y evitando que un admin se desactive a sí mismo. `username` y `email` se mantienen únicos y no se reutilizan en nuevos registros tras una baja lógica.
 
 ### Seguridad, Transacciones y Estado
 
-- **Cookie `HttpOnly`:** el login envía credenciales por formulario OAuth2 a `POST /api/v1/auth/token` y el JWT viaja en la cookie `HttpOnly` `access_token`. El frontend nunca lee ni guarda tokens.
-- **Interceptor de Axios:** ante `401` fuera de `/auth/token` y `/auth/me`, o `400` con `detail` `"Cuenta de usuario desactivada"`, limpia `authStore` y redirige a `/login`.
-- **Transacciones de pedidos:** al crear un pedido se valida que todos los ítems existan, estén activos y disponibles y tengan stock suficiente; se descuenta el stock, se copian `nombre_producto`, `precio_unitario` y `subtotal` en cada línea y se calcula el `total` en el servidor. Al cancelar un pedido (por el cliente en `PENDIENTE` o por el admin desde `PENDIENTE` o `EN_PREPARACION`), el stock se restituye automáticamente.
+* **Cookie `HttpOnly`:** el login envía credenciales por formulario OAuth2 a `POST /api/v1/auth/token` y el JWT viaja en la cookie `HttpOnly` `access_token`. El frontend nunca lee ni guarda tokens.
+
+* **Interceptor de Axios:** ante `401` fuera de `/auth/token` y `/auth/me`, o `400` con `detail` `"Cuenta de usuario desactivada"`, limpia `authStore` y redirige a `/login`.
+
+* **Estado y selectores en frontend:** se utilizan referencias estables para carritos vacíos en los selectores de Zustand (`EMPTY_CART`) para evitar bucles de renderizado, y `ProductoCard` / vistas de carrito funcionan tanto sin sesión (`guest`) como con sesión iniciada (`user-<id>`).
+
+* **Transacciones de pedidos (`RN-01` a `RN-06`):** al crear un pedido se valida que exista al menos un ítem y que no haya productos repetidos (`ProductoRepetido` -> `400`); cada producto debe existir, estar activo y disponible y tener stock suficiente. En la misma transacción se verifica el stock, se descuenta (naciendo el pedido en `PENDIENTE`), se copian `nombre_producto`, `precio_unitario` y `subtotal` en cada línea inmutable y se calcula el `total` en el servidor. Al cancelar un pedido (por el cliente en `PENDIENTE` o por el admin desde un estado no terminal permitido), el stock se restituye automáticamente en la misma transacción.

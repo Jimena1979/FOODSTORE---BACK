@@ -15,33 +15,30 @@ class ProductoRepository(BaseRepository[Producto]):
         search: str | None = None,
         categoria_id: int | None = None,
         disponible: bool | None = None,
-        solo_activos: bool = True
+        solo_activos: bool = True,
     ) -> tuple[list[Producto], int]:
         query = select(Producto)
         count_query = select(Producto)
 
-        # Por defecto los listados públicos devuelven solo registros activos
         if solo_activos:
             query = query.where(Producto.activo == True)
             count_query = count_query.where(Producto.activo == True)
 
-        # Búsqueda por nombre (insensible a mayúsculas/minúsculas con ilike)
         if search:
-            search_filter = col(Producto.nombre).ilike(f"%{search}%")
-            query = query.where(search_filter)
-            count_query = count_query.where(search_filter)
+            termino = search.strip()
+            if termino:
+                search_filter = col(Producto.nombre).ilike(f"%{termino}%")
+                query = query.where(search_filter)
+                count_query = count_query.where(search_filter)
 
-        # Filtro por categoría (relación 1:N directa)
         if categoria_id is not None:
             query = query.where(Producto.categoria_id == categoria_id)
             count_query = count_query.where(Producto.categoria_id == categoria_id)
 
-        # Filtro por disponibilidad
         if disponible is not None:
             query = query.where(Producto.disponible == disponible)
             count_query = count_query.where(Producto.disponible == disponible)
 
-        # Calcular el total para la paginación e implementar offset/limit
         total = len(self.session.exec(count_query).all())
         query = query.offset(skip).limit(limit)
         items = list(self.session.exec(query).all())

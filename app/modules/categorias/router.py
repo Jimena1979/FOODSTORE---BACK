@@ -23,7 +23,6 @@ def get_categoria_service() -> CategoriaService:
 
 
 @router.get("", response_model=list[CategoriaRead], status_code=status.HTTP_200_OK)
-@router.get("/", response_model=list[CategoriaRead], status_code=status.HTTP_200_OK, include_in_schema=False)
 def listar_categorias(
     service: Annotated[CategoriaService, Depends(get_categoria_service)],
     skip: Annotated[int, Query(ge=0)] = 0,
@@ -44,7 +43,6 @@ def obtener_categoria(
 
 
 @router.post("", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED)
-@router.post("/", response_model=CategoriaRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def crear_categoria(
     data: CategoriaCreate,
     _admin: Annotated[UserPublic, Depends(require_role(["admin"]))],
